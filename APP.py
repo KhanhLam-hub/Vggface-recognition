@@ -7,32 +7,17 @@ import requests
 from io import BytesIO
 
 # ================== CẤU HÌNH ==================
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")       # Token bot Telegram
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")   # Chat ID nhận cảnh báo
-API_KEY_UPLOAD = os.getenv("API_KEY_UPLOAD")       # API key xác thực từ ESP32
-GITHUB_EMBEDDINGS_URL = os.getenv("GITHUB_EMBEDDINGS_URL")  # Link RAW tới embeddings.pkl trên GitHub
-LOCAL_EMBEDDINGS_PATH = "/opt/render/.deepface/weights/embeddings.pkl"  # Đường dẫn cục bộ dự phòng
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")      
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")  
+API_KEY_UPLOAD = os.getenv("API_KEY_UPLOAD")       
+LOCAL_EMBEDDINGS_PATH = "/opt/render/.deepface/weights/embeddings.pkl"  
 
 app = Flask(__name__)
 
 # ================== TẢI EMBEDDINGS TỪ GITHUB HOẶC CỤC BỘ ==================
 def load_embeddings_from_github():
-    """Tải embeddings.pkl từ GitHub hoặc file cục bộ nếu thất bại"""
-    try:
-        res = requests.get(GITHUB_EMBEDDINGS_URL, timeout=10)
-        res.raise_for_status()
-        
-        # Kiểm tra nội dung có phải nhị phân hợp lệ không
-        if res.headers.get("content-type", "").startswith("text") or b"<html" in res.content[:100]:
-            raise ValueError("Tải về nội dung không phải file pickle (có thể là HTML)")
-        
-        embeddings_data = pickle.loads(res.content)
-        print("✅ Tải embeddings từ GitHub thành công")
-        return embeddings_data
-    except Exception as e:
-        print("❌ Lỗi tải embeddings từ GitHub:", e)
-        # Thử tải từ file cục bộ
-        return load_embeddings_from_local()
+    """Tải embeddings.pkl từ file cục bộ (bỏ tải từ GitHub)"""
+    return load_embeddings_from_local()
 
 def load_embeddings_from_local():
     """Tải embeddings từ file cục bộ nếu có"""
