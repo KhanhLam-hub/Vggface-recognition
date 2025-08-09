@@ -1,0 +1,17 @@
+
+services:
+  - type: web
+    name: Vggface-recognition-server
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn APP:app --bind 0.0.0.0:$PORT
+    envVars:
+      - key: API_KEY_UPLOAD
+        value: your_api_key_here
+      - key: TELEGRAM_TOKEN
+        value: your_telegram_bot_token_here
+      - key: TELEGRAM_CHAT_ID
+        value: your_telegram_chat_id_here
+      - key: GITHUB_EMBEDDINGS_URL
+      https://github.com/KhanhLam-hub/Vggface-recognition/blob/main/embeddings.pkl
