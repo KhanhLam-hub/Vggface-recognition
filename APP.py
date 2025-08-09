@@ -11,7 +11,7 @@ TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 API_KEY_UPLOAD = os.getenv("API_KEY_UPLOAD")       
 
 # Link raw file embeddings trên GitHub (thay bằng link của bạn)
-EMBEDDINGS_URL = "https://raw.githubusercontent.com/username/repo/main/embeddings.pkl"
+EMBEDDINGS_URL = "https://raw.githubusercontent.com/KhanhLam-hub/Vggface-recognition/main/embeddings.pkl"
 
 app = Flask(__name__)
 
