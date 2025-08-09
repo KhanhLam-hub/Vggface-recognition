@@ -1,60 +1,66 @@
 # Cài thư viện cần thiết
-!pip install mtcnn keras-facenet
-
+import os
 import pickle
 import numpy as np
-from mtcnn.mtcnn import MTCNN
-from PIL import Image
-from numpy import asarray
-from keras_facenet import FaceNet
-import os
+from deepface import DeepFace
+import cv2
 
-# Hàm cắt khuôn mặt từ ảnh
-def extract_face(filename, required_size=(160, 160)):
-    pixels = Image.open(filename).convert('RGB')
-    pixels = asarray(pixels)
-    detector = MTCNN()
-    results = detector.detect_faces(pixels)
-    if len(results) == 0:
-        print(f"❌ Không tìm thấy khuôn mặt trong {filename}")
-        return None
-    x1, y1, width, height = results[0]['box']
-    x1, y1 = abs(x1), abs(y1)
-    x2, y2 = x1 + width, y1 + height
-    face = pixels[y1:y2, x1:x2]
-    image = Image.fromarray(face)
-    image = image.resize(required_size)
-    return asarray(image)
+def create_embeddings(image_dir, output_path, detector_backend="opencv"):
+    """Tạo và lưu embeddings từ thư mục ảnh"""
+    person_names = []
+    embeddings = []
+    labels = []
 
-# Load model FaceNet
-embedder = FaceNet()
+    label_id = 0
+    for person_name in os.listdir(image_dir):
+        person_path = os.path.join(image_dir, person_name)
+        if not os.path.isdir(person_path):
+            print(f"⚠️ Bỏ qua {person_path}: không phải thư mục")
+            continue
 
-# Thư mục chứa ảnh người thân
-image_dir = "/content/drive/MyDrive/Nhandienkhuonmat/Data_faces" 
+        for image_name in os.listdir(person_path):
+            img_path = os.path.join(person_path, image_name)
+            # Kiểm tra file ảnh có hợp lệ không
+            img = cv2.imread(img_path)
+            if img is None:
+                print(f"❌ Ảnh {img_path} không đọc được (hỏng hoặc định dạng sai)")
+                continue
+            try:
+                # DeepFace tự detect mặt và tạo embedding
+                embedding = DeepFace.represent(
+                    img_path=img_path,
+                    model_name="VGG-Face",
+                    detector_backend=detector_backend, 
+                    enforce_detection=False  
+                )[0]["embedding"]
+                embeddings.append(embedding)
+                person_names.append(person_name)
+                labels.append(label_id)
+                print(f"✅ Xử lý thành công {img_path}")
+            except Exception as e:
+                print(f"❌ Lỗi tạo embedding cho {img_path}: {e}")
+        label_id += 1
 
-# Lưu embedding
-person_names = []
-embeddings = []
-labels = []
+    if not embeddings:
+        print("❌ Không tạo được embedding nào. Kiểm tra lại thư mục ảnh.")
+        return
+    # Tạo dictionary
+    data = {
+        "person_names": person_names,
+        "embeddings": np.array(embeddings),
+        "labels": labels
+    }
 
-label_id = 0
-for person_name in os.listdir(image_dir):
-    person_path = os.path.join(image_dir, person_name)
-    if not os.path.isdir(person_path):
-        continue
-    for image_name in os.listdir(person_path):
-        img_path = os.path.join(person_path, image_name)
-        face_pixels = extract_face(img_path)
-        if face_pixels is not None:
-            embedding = embedder.embeddings([face_pixels])[0]
-            embeddings.append(embedding)
-            person_names.append(person_name)
-            labels.append(label_id)
-    label_id += 1
+    try:
+        with open(output_path, "wb") as f:
+            pickle.dump(data, f)
+        print(f"✅ Lưu embeddings thành công tại {output_path}")
+    except Exception as e:
+        print(f"❌ Lỗi lưu embeddings: {e}")
 
-# Tạo dictionary
-data = {
-    "person_names": person_names,
-    "embeddings": np.array(embeddings),
-    "labels": labels
-}
+if __name__ == "__main__":
+    # Đường dẫn tới thư mục chứa thư mục ảnh người thân
+    image_dir = "/content/drive/MyDrive/Nhandienkhuonmat/Data_faces"
+    # File pickle để lưu embeddings
+    output_path = "/content/drive/MyDrive/Nhandienkhuonmat/embeddings.pkl"
+    create_embeddings(image_dir, output_path, detector_backend="opencv")
