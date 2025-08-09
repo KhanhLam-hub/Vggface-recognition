@@ -1,4 +1,3 @@
-
 # Cài thư viện cần thiết
 !pip install mtcnn keras-facenet
 
