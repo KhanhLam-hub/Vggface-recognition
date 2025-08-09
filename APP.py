@@ -4,43 +4,35 @@ import pickle
 import cv2
 import os
 import requests
-from io import BytesIO
 
 # ================== CẤU HÌNH ==================
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")      
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")  
 API_KEY_UPLOAD = os.getenv("API_KEY_UPLOAD")       
-LOCAL_EMBEDDINGS_PATH = "/opt/render/.deepface/weights/embeddings.pkl"  
+
+# Link raw file embeddings trên GitHub (thay bằng link của bạn)
+EMBEDDINGS_URL = "https://raw.githubusercontent.com/username/repo/main/embeddings.pkl"
 
 app = Flask(__name__)
 
-# ================== TẢI EMBEDDINGS TỪ GITHUB HOẶC CỤC BỘ ==================
+# ================== TẢI EMBEDDINGS TỪ GITHUB VÀ LOAD TRỰC TIẾP ==================
 def load_embeddings_from_github():
-    """Tải embeddings.pkl từ file cục bộ (bỏ tải từ GitHub)"""
-    return load_embeddings_from_local()
-
-def load_embeddings_from_local():
-    """Tải embeddings từ file cục bộ nếu có"""
     try:
-        if os.path.exists(LOCAL_EMBEDDINGS_PATH):
-            with open(LOCAL_EMBEDDINGS_PATH, "rb") as f:
-                embeddings_data = pickle.load(f)
-            print("✅ Tải embeddings từ file cục bộ thành công")
-            return embeddings_data
-        else:
-            print("❌ Không tìm thấy file embeddings cục bộ tại", LOCAL_EMBEDDINGS_PATH)
-            return None
+        print("⏳ Đang tải embeddings trực tiếp từ GitHub...")
+        r = requests.get(EMBEDDINGS_URL, timeout=10)
+        r.raise_for_status()
+        embeddings_data = pickle.loads(r.content)
+        print(f"✅ Tải embeddings thành công ({len(embeddings_data['person_names'])} entries).")
+        return embeddings_data
     except Exception as e:
-        print("❌ Lỗi tải embeddings cục bộ:", e)
+        print("❌ Lỗi tải embeddings từ GitHub:", e)
         return None
 
 # ================== GỬI ẢNH + CẢNH BÁO TELEGRAM ==================
 def send_telegram_alert(message, image=None):
-    """Gửi tin nhắn + ảnh cảnh báo tới Telegram"""
     try:
         url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
         requests.post(url, data={"chat_id": TELEGRAM_CHAT_ID, "text": message}, timeout=5)
-
         if image is not None:
             files = {"photo": ("alert.jpg", image, "image/jpeg")}
             url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendPhoto"
@@ -61,17 +53,14 @@ else:
 # ================== ROUTE CƠ BẢN CHO / ==================
 @app.route("/", methods=["GET", "HEAD"])
 def home():
-    """Route cơ bản để kiểm tra server"""
     return jsonify({"status": "Server is running", "embeddings_loaded": bool(embeddings_data)})
 
 # ================== API NHẬN ẢNH ==================
 @app.route("/upload", methods=["POST"])
 def upload_image():
-    """Nhận ảnh từ ESP32-CAM, so khớp khuôn mặt"""
     auth = request.headers.get("Authorization")
     if auth != f"Bearer {API_KEY_UPLOAD}":
         return jsonify({"error": "Unauthorized"}), 401
-
     if "image" not in request.files:
         return jsonify({"error": "Không có ảnh gửi lên"}), 400
 
@@ -82,7 +71,7 @@ def upload_image():
         return jsonify({"error": "Không thể giải mã ảnh"}), 400
 
     try:
-        from deepface import DeepFace  # Import chậm để giảm thời gian khởi động
+        from deepface import DeepFace
         detections = DeepFace.represent(frame, model_name="VGG-Face", enforce_detection=False)
         if not detections:
             send_telegram_alert("🚨 Không phát hiện khuôn mặt!", file)
@@ -104,7 +93,6 @@ def upload_image():
             send_telegram_alert(f"✅ Nhận diện: {name}", file)
 
         return jsonify({"name": name, "distance": float(min_dist)})
-
     except Exception as e:
         print("❌ Lỗi xử lý ảnh:", e)
         return jsonify({"error": str(e)}), 500
