@@ -12,5 +12,4 @@ services:
         value: your_telegram_bot_token_here
       - key: TELEGRAM_CHAT_ID
         value: your_telegram_chat_id_here
-      - key: GITHUB_EMBEDDINGS_URL
-      https://raw.githubusercontent.com/KhanhLam-hub/Vggface-recognition/main/embeddings.pkl
+
