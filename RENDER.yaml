@@ -3,7 +3,7 @@ services:
     name: Vggface-recognition-server
     env: python
     plan: free
-    buildCommand: pip install --upgrade pip setuptools wheel && pip install -r REQUIREMENTS.txt
+    buildCommand: pip install --upgrade pip setuptools wheel && pip install -r REQUIREMENTS.txt --no-cache-dir
     startCommand: gunicorn APP:app --bind 0.0.0.0:$PORT
     envVars:
       - key: API_KEY_UPLOAD
