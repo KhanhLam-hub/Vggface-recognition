@@ -13,6 +13,21 @@ API_KEY_UPLOAD = os.getenv("API_KEY_UPLOAD")
 # Link raw file embeddings trên GitHub (thay bằng link của bạn)
 EMBEDDINGS_URL = "https://raw.githubusercontent.com/KhanhLam-hub/Vggface-recognition/main/embeddings.pkl"
 
+# Gửi thông báo khởi động của server đến Telegram
+def send_startup_message():
+    TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+    TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+    if TELEGRAM_TOKEN and TELEGRAM_CHAT_ID:
+        url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+        try:
+            requests.post(url, data={
+                "chat_id": TELEGRAM_CHAT_ID,
+                "text": "🌐 Server nhận diện khuôn mặt đã khởi động thành công và sẵn sàng hoạt động!"
+            }, timeout=5)
+            print("✅ Đã gửi thông báo khởi động lên Telegram.")
+        except Exception as e:
+            print("❌ Lỗi gửi thông báo khởi động lên Telegram:", e)
+
 app = Flask(__name__)
 
 # ================== TẢI EMBEDDINGS TỪ GITHUB VÀ LOAD TRỰC TIẾP ==================
@@ -27,6 +42,9 @@ def load_embeddings_from_github():
     except Exception as e:
         print("❌ Lỗi tải embeddings từ GitHub:", e)
         return None
+        
+# Server khởi động
+send_startup_message()
 
 # ================== GỬI ẢNH + CẢNH BÁO TELEGRAM ==================
 def send_telegram_alert(message, image=None):
@@ -53,7 +71,7 @@ else:
 # ================== ROUTE CƠ BẢN CHO / ==================
 @app.route("/", methods=["GET", "HEAD"])
 def home():
-    return jsonify({"status": "Server is running", "embeddings_loaded": bool(embeddings_data)})
+    return jsonify({"status": "⛹️Server is running🚀", "embeddings_loaded": bool(embeddings_data)})
 
 # ================== API NHẬN ẢNH ==================
 @app.route("/upload", methods=["POST"])
