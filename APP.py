@@ -82,22 +82,34 @@ def upload_image():
     if "image" not in request.files:
         return jsonify({"error": "Không có ảnh gửi lên"}), 400
 
+    # Đọc và giải mã ảnh
     file = request.files["image"].read()
     np_img = np.frombuffer(file, np.uint8)
     frame = cv2.imdecode(np_img, cv2.IMREAD_COLOR)
     if frame is None:
         return jsonify({"error": "Không thể giải mã ảnh"}), 400
 
+    # Resize ảnh về đúng kích thước cho VGG-Face
+    try:
+        frame = cv2.resize(frame, (224, 224), interpolation=cv2.INTER_AREA)
+    except Exception as e:
+        print("❌ Lỗi resize ảnh:", e)
+        return jsonify({"error": "Không thể resize ảnh"}), 500
+
+    # Encode ảnh đã resize để gửi Telegram (giảm dung lượng)
+    _, img_encoded = cv2.imencode(".jpg", frame)
+    img_bytes = img_encoded.tobytes()
+
     try:
         from deepface import DeepFace
         detections = DeepFace.represent(frame, model_name="VGG-Face", enforce_detection=False)
         if not detections:
-            send_telegram_alert("🚨 Không phát hiện khuôn mặt!", file)
+            send_telegram_alert("🚨 Không phát hiện khuôn mặt!", img_bytes)
             return jsonify({"result": "Không phát hiện khuôn mặt"})
 
         face_embedding = np.array(detections[0]["embedding"])
         if len(stored_embeddings) == 0:
-            send_telegram_alert("🚨 Không có dữ liệu khuôn mặt!", file)
+            send_telegram_alert("🚨 Không có dữ liệu khuôn mặt!", img_bytes)
             return jsonify({"result": "Không có dữ liệu khuôn mặt"})
 
         distances = np.linalg.norm(stored_embeddings - face_embedding, axis=1)
@@ -106,9 +118,9 @@ def upload_image():
         name = person_names[idx] if min_dist < 0.5 else "Người lạ"
 
         if name == "Người lạ":
-            send_telegram_alert("🚨 Phát hiện NGƯỜI LẠ!", file)
+            send_telegram_alert("🚨 Phát hiện NGƯỜI LẠ!", img_bytes)
         else:
-            send_telegram_alert(f"✅ Nhận diện: {name}", file)
+            send_telegram_alert(f"✅ Nhận diện: {name}", img_bytes)
 
         return jsonify({"name": name, "distance": float(min_dist)})
     except Exception as e:
