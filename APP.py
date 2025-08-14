@@ -10,96 +10,94 @@ TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")  
 API_KEY_UPLOAD = os.getenv("API_KEY_UPLOAD")       
 
-# Link raw file embeddings trên GitHub (thay bằng link của bạn)
 EMBEDDINGS_URL = "https://raw.githubusercontent.com/KhanhLam-hub/Vggface-recognition/main/embeddings.pkl"
-
-# Gửi thông báo khởi động của server đến Telegram
-def send_startup_message():
-    TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-    TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
-    if TELEGRAM_TOKEN and TELEGRAM_CHAT_ID:
-        url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-        try:
-            requests.post(url, data={
-                "chat_id": TELEGRAM_CHAT_ID,
-                "text": "🌐 Server nhận diện khuôn mặt đã khởi động thành công và sẵn sàng hoạt động!"
-            }, timeout=5)
-            print("✅ Đã gửi thông báo khởi động lên Telegram.")
-        except Exception as e:
-            print("❌ Lỗi gửi thông báo khởi động lên Telegram:", e)
 
 app = Flask(__name__)
 
-# ================== TẢI EMBEDDINGS TỪ GITHUB VÀ LOAD TRỰC TIẾP ==================
-def load_embeddings_from_github():
+# ================== GỬI CẢNH BÁO TELEGRAM ==================
+def send_telegram_alert(message, image_bytes=None):
     try:
-        print("⏳ Đang tải embeddings trực tiếp từ GitHub...")
-        r = requests.get(EMBEDDINGS_URL, timeout=10)
-        r.raise_for_status()
-        embeddings_data = pickle.loads(r.content)
-        print(f"✅ Tải embeddings thành công ({len(embeddings_data['person_names'])} entries).")
-        return embeddings_data
-    except Exception as e:
-        print("❌ Lỗi tải embeddings từ GitHub:", e)
-        return None
-        
-# Server khởi động
-send_startup_message()
-
-# ================== GỬI ẢNH + CẢNH BÁO TELEGRAM ==================
-def send_telegram_alert(message, image=None):
-    try:
-        url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-        requests.post(url, data={"chat_id": TELEGRAM_CHAT_ID, "text": message}, timeout=5)
-        if image is not None:
-            files = {"photo": ("alert.jpg", image, "image/jpeg")}
-            url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendPhoto"
-            requests.post(url, data={"chat_id": TELEGRAM_CHAT_ID}, files=files, timeout=5)
+        if TELEGRAM_TOKEN and TELEGRAM_CHAT_ID:
+            # Gửi text
+            requests.post(
+                f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage",
+                data={"chat_id": TELEGRAM_CHAT_ID, "text": message},
+                timeout=5
+            )
+            # Gửi ảnh nếu có
+            if image_bytes:
+                files = {"photo": ("alert.jpg", image_bytes, "image/jpeg")}
+                requests.post(
+                    f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendPhoto",
+                    data={"chat_id": TELEGRAM_CHAT_ID},
+                    files=files,
+                    timeout=5
+                )
     except Exception as e:
         print("❌ Lỗi gửi Telegram:", e)
 
-# ================== NẠP MÔ HÌNH BAN ĐẦU ==================
-embeddings_data = load_embeddings_from_github()
+# ================== THÔNG BÁO KHỞI ĐỘNG ==================
+def send_startup_message():
+    send_telegram_alert("🌐 Server nhận diện khuôn mặt đã khởi động thành công và sẵn sàng hoạt động!")
+
+send_startup_message()
+
+# ================== LOAD EMBEDDINGS ==================
+def load_embeddings():
+    try:
+        print("⏳ Đang tải embeddings từ GitHub...")
+        r = requests.get(EMBEDDINGS_URL, timeout=10)
+        r.raise_for_status()
+        data = pickle.loads(r.content)
+        print(f"✅ Tải thành công ({len(data['person_names'])} entries).")
+        return data
+    except Exception as e:
+        print("❌ Lỗi tải embeddings:", e)
+        return None
+
+embeddings_data = load_embeddings()
 if embeddings_data:
     person_names = embeddings_data["person_names"]
     stored_embeddings = np.array(embeddings_data["embeddings"])
 else:
     person_names = []
     stored_embeddings = np.array([])
-    print("⚠️ Không có dữ liệu embeddings, ứng dụng sẽ chạy nhưng không nhận diện được khuôn mặt")
+    print("⚠️ Không có dữ liệu embeddings, server vẫn chạy nhưng không nhận diện được khuôn mặt")
 
-# ================== ROUTE CƠ BẢN CHO / ==================
-@app.route("/", methods=["GET", "HEAD"])
+# ================== ROUTE KIỂM TRA ==================
+@app.route("/", methods=["GET"])
 def home():
-    return jsonify({"status": "⛹️Server is running🚀", "embeddings_loaded": bool(embeddings_data)})
+    return jsonify({"status": "Server running 🚀", "embeddings_loaded": bool(embeddings_data)})
 
-# ================== API NHẬN ẢNH ==================
+# ================== ROUTE NHẬN ẢNH ==================
 @app.route("/upload", methods=["POST"])
 def upload_image():
+    # Kiểm tra API key
     auth = request.headers.get("Authorization")
     if auth != f"Bearer {API_KEY_UPLOAD}":
         return jsonify({"error": "Unauthorized"}), 401
     if "image" not in request.files:
         return jsonify({"error": "Không có ảnh gửi lên"}), 400
 
-    # Đọc và giải mã ảnh
+    # Đọc ảnh
     file = request.files["image"].read()
     np_img = np.frombuffer(file, np.uint8)
     frame = cv2.imdecode(np_img, cv2.IMREAD_COLOR)
     if frame is None:
         return jsonify({"error": "Không thể giải mã ảnh"}), 400
 
-    # Resize ảnh về đúng kích thước cho VGG-Face
+    # Resize ảnh để giảm RAM
     try:
         frame = cv2.resize(frame, (224, 224), interpolation=cv2.INTER_AREA)
     except Exception as e:
         print("❌ Lỗi resize ảnh:", e)
         return jsonify({"error": "Không thể resize ảnh"}), 500
 
-    # Encode ảnh đã resize để gửi Telegram (giảm dung lượng)
+    # Encode ảnh để gửi Telegram
     _, img_encoded = cv2.imencode(".jpg", frame)
     img_bytes = img_encoded.tobytes()
 
+    # Xử lý nhận diện
     try:
         from deepface import DeepFace
         detections = DeepFace.represent(frame, model_name="VGG-Face", enforce_detection=False)
@@ -112,11 +110,13 @@ def upload_image():
             send_telegram_alert("🚨 Không có dữ liệu khuôn mặt!", img_bytes)
             return jsonify({"result": "Không có dữ liệu khuôn mặt"})
 
+        # So sánh khoảng cách
         distances = np.linalg.norm(stored_embeddings - face_embedding, axis=1)
         min_dist = np.min(distances)
         idx = np.argmin(distances)
         name = person_names[idx] if min_dist < 0.5 else "Người lạ"
 
+        # Gửi cảnh báo Telegram
         if name == "Người lạ":
             send_telegram_alert("🚨 Phát hiện NGƯỜI LẠ!", img_bytes)
         else:
